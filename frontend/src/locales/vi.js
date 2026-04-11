@@ -421,6 +421,7 @@ export default {
   batteryCaliperSkip: 'Bỏ qua pin này',
   batteryHistorySearch: 'Tìm theo mã đơn hàng...',
   batteryHistoryExportCsv: 'Xuất CSV',
+  batteryHistoryExportExcel: 'Xuất Excel',
   batteryHistoryAllTypes: 'Tất cả loại',
   batteryHistoryAllLines: 'Tất cả dòng',
   workshops: 'Xưởng',

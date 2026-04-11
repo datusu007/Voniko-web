@@ -421,6 +421,7 @@ export default {
   batteryCaliperSkip: 'Skip this battery',
   batteryHistorySearch: 'Search by order ID...',
   batteryHistoryExportCsv: 'Export CSV',
+  batteryHistoryExportExcel: 'Export Excel',
   batteryHistoryAllTypes: 'All types',
   batteryHistoryAllLines: 'All lines',
   workshops: 'Workshops',
