@@ -1,0 +1,287 @@
+/**
+ * batterySocket.js
+ *
+ * WebSocket hub — relays SSE events from Python battery_service to all
+ * connected browser clients, and proxies control commands from the browser
+ * to the correct Python service.
+ *
+ * Multi-station support: each WS message carries a `stationId` field.
+ * Commands are routed to the matching station URL from stationRegistry.
+ * Each active station gets its own independent SSE relay stream.
+ */
+const { WebSocketServer, WebSocket } = require('ws');
+const axios = require('axios');
+const logger = require('./logger');
+const { resolveUrl, getStations } = require('./stationRegistry');
+
+const PYTHON_BASE = process.env.BATTERY_SERVICE_URL || 'http://127.0.0.1:8765';
+
+let wss = null;
+
+// Map<ws, { token, stationId }>
+const clients = new Map();
+
+// Map<stationId, { abortController, connected }>
+const stationSseMap = new Map();
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/** Resolve base URL: stationRegistry first, env fallback. */
+function _getBase(stationId) {
+  if (stationId) {
+    const url = resolveUrl(stationId);
+    if (url) return url;
+  }
+  return PYTHON_BASE;
+}
+
+/** Returns true if any connected WS client is using this stationId. */
+function _hasClientsForStation(stationId) {
+  for (const [, state] of clients) {
+    if (state.stationId === stationId) return true;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Initialise WebSocket server
+// ---------------------------------------------------------------------------
+
+function initBatteryWebSocket(server) {
+  wss = new WebSocketServer({ server, path: '/ws/battery' });
+
+  wss.on('connection', (ws, req) => {
+    const url = new URL(req.url, 'http://localhost');
+    const token = url.searchParams.get('token') || null;
+    clients.set(ws, { token, stationId: null });
+    logger.info('Battery WS client connected', { total: clients.size });
+
+    ws.on('message', async (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        await handleClientMessage(ws, msg);
+      } catch (e) {
+        sendToClient(ws, { type: 'error', message: e.message });
+      }
+    });
+
+    ws.on('close', () => {
+      const { stationId } = clients.get(ws) || {};
+      clients.delete(ws);
+      logger.info('Battery WS client disconnected', { total: clients.size });
+      // Stop SSE relay for this station if no clients remain
+      if (stationId && !_hasClientsForStation(stationId)) {
+        stopSseRelay(stationId);
+      }
+    });
+
+    ws.on('error', (err) => {
+      logger.error('Battery WS error', { error: err.message });
+      clients.delete(ws);
+    });
+  });
+
+  logger.info('Battery WebSocket server initialised at /ws/battery');
+}
+
+// ---------------------------------------------------------------------------
+// Message dispatcher
+// ---------------------------------------------------------------------------
+
+async function handleClientMessage(ws, msg) {
+  const { action, stationId, payload } = msg;
+  const base = _getBase(stationId);
+
+  // Bind this WS connection to the selected station
+  if (stationId) {
+    const state = clients.get(ws);
+    if (state) state.stationId = stationId;
+  }
+
+  // ── get_stations ──────────────────────────────────────────────────────────
+  if (action === 'get_stations') {
+    sendToClient(ws, { type: 'stations', stations: getStations() });
+    return;
+  }
+
+  // ── connect ───────────────────────────────────────────────────────────────
+  if (action === 'connect') {
+    try {
+      const res = await axios.post(`${base}/connect`, payload || {});
+      broadcastToStation(stationId, {
+        type: 'connect_result',
+        ok: true,
+        message: res.data.message,
+        stationId,
+      });
+      startSseRelay(stationId, base);
+    } catch (e) {
+      const detail = e.response?.data?.detail || e.message;
+      broadcastToStation(stationId, {
+        type: 'connect_result',
+        ok: false,
+        message: detail,
+        stationId,
+      });
+    }
+    return;
+  }
+
+  // ── disconnect ────────────────────────────────────────────────────────────
+  if (action === 'disconnect') {
+    try { await axios.post(`${base}/disconnect`); } catch (_) {}
+    stopSseRelay(stationId);
+    broadcastToStation(stationId, { type: 'disconnected', stationId });
+    return;
+  }
+
+  // ── start ─────────────────────────────────────────────────────────────────
+  if (action === 'start') {
+    try {
+      await axios.post(`${base}/start`, payload || {});
+      broadcastToStation(stationId, { type: 'test_started', stationId });
+    } catch (e) {
+      const detail = e.response?.data?.detail || e.message;
+      broadcastToStation(stationId, { type: 'error', message: detail, stationId });
+    }
+    return;
+  }
+
+  // ── stop ──────────────────────────────────────────────────────────────────
+  if (action === 'stop') {
+    try {
+      await axios.post(`${base}/stop`);
+      broadcastToStation(stationId, { type: 'test_stopped', stationId });
+    } catch (e) {
+      const detail = e.response?.data?.detail || e.message;
+      broadcastToStation(stationId, { type: 'error', message: detail, stationId });
+    }
+    return;
+  }
+
+  // ── get_ports ─────────────────────────────────────────────────────────────
+  if (action === 'get_ports') {
+    try {
+      const res = await axios.get(`${base}/ports`);
+      sendToClient(ws, { type: 'ports', ports: res.data.ports, stationId });
+    } catch (e) {
+      sendToClient(ws, { type: 'ports', ports: [], error: e.message, stationId });
+    }
+    return;
+  }
+
+  // ── get_status ────────────────────────────────────────────────────────────
+  if (action === 'get_status') {
+    try {
+      const res = await axios.get(`${base}/status`);
+      sendToClient(ws, { type: 'status', data: res.data, stationId });
+    } catch (e) {
+      sendToClient(ws, { type: 'error', message: e.message, stationId });
+    }
+    return;
+  }
+
+  // ── clear_session ─────────────────────────────────────────────────────────
+  if (action === 'clear_session') {
+    try {
+      await axios.delete(`${base}/session`);
+      broadcastToStation(stationId, { type: 'session_cleared', stationId });
+    } catch (e) {
+      sendToClient(ws, { type: 'error', message: e.message, stationId });
+    }
+    return;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Per-station SSE relay
+// ---------------------------------------------------------------------------
+
+function startSseRelay(stationId, base) {
+  const existing = stationSseMap.get(stationId);
+  if (existing && existing.connected) return; // already running
+
+  const abortController = new AbortController();
+  stationSseMap.set(stationId, { abortController, connected: true });
+
+  (async () => {
+    try {
+      const response = await axios.get(`${base}/stream`, {
+        responseType: 'stream',
+        signal: abortController.signal,
+        timeout: 0, // no timeout on streaming
+      });
+
+      let buffer = '';
+
+      response.data.on('data', (chunk) => {
+        buffer += chunk.toString();
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop(); // keep incomplete last chunk
+        for (const part of parts) {
+          if (!part.trim()) continue;
+          const dataLine = part.split('\n').find((l) => l.startsWith('data:'));
+          if (!dataLine) continue;
+          try {
+            const json = JSON.parse(dataLine.slice(5).trim());
+            // Attach stationId so the browser can filter messages
+            broadcastToStation(stationId, { ...json, stationId });
+          } catch (_) {}
+        }
+      });
+
+      response.data.on('end', () => {
+        const s = stationSseMap.get(stationId);
+        if (s) s.connected = false;
+        logger.info('Battery SSE stream ended', { stationId });
+      });
+
+      response.data.on('error', (err) => {
+        const s = stationSseMap.get(stationId);
+        if (s) s.connected = false;
+        logger.warn('Battery SSE stream error', { stationId, error: err.message });
+      });
+    } catch (e) {
+      const s = stationSseMap.get(stationId);
+      if (s) s.connected = false;
+      if (e.code !== 'ERR_CANCELED') {
+        logger.warn('Battery SSE relay failed', { stationId, error: e.message });
+      }
+    }
+  })();
+}
+
+function stopSseRelay(stationId) {
+  const s = stationSseMap.get(stationId);
+  if (s && s.abortController) {
+    s.abortController.abort();
+  }
+  stationSseMap.delete(stationId);
+}
+
+// ---------------------------------------------------------------------------
+// Broadcast helpers
+// ---------------------------------------------------------------------------
+
+/** Send to all WS clients that are currently working with this stationId. */
+function broadcastToStation(stationId, data) {
+  const str = JSON.stringify(data);
+  for (const [ws, state] of clients) {
+    if (state.stationId === stationId) {
+      try {
+        if (ws.readyState === WebSocket.OPEN) ws.send(str);
+      } catch (_) {}
+    }
+  }
+}
+
+/** Send to a specific WS client only. */
+function sendToClient(ws, data) {
+  try {
+    if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
+  } catch (_) {}
+}
+
+module.exports = { initBatteryWebSocket };
