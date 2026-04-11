@@ -151,11 +151,12 @@ export default function BatteryPage() {
   const caliperIndexRef = useRef(0);
   const caliperSingleModeRef = useRef(false);
   const recordsLengthRef = useRef(0);
+  const recordsRef = useRef([]);
   useEffect(() => { caliperDiaRef.current = caliperDia; }, [caliperDia]);
   useEffect(() => { caliperHeiRef.current = caliperHei; }, [caliperHei]);
   useEffect(() => { caliperIndexRef.current = caliperIndex; }, [caliperIndex]);
   useEffect(() => { caliperSingleModeRef.current = caliperSingleMode; }, [caliperSingleMode]);
-  useEffect(() => { recordsLengthRef.current = records.length; }, [records]);
+  useEffect(() => { recordsLengthRef.current = records.length; recordsRef.current = records; }, [records]);
 
   // Readings grouped by battery id for mini chart popover
   const [readingsByBattery, setReadingsByBattery] = useState({});
@@ -229,6 +230,24 @@ export default function BatteryPage() {
               updated[idx] = rec;
               return updated;
             });
+            // Also patch the matching history entry so Lịch sử tab shows real values
+            const recordId = recordsRef.current[idx]?.id;
+            if (recordId !== undefined) {
+              setHistoryRecords(prev => {
+                const updated = [...prev];
+                for (let i = updated.length - 1; i >= 0; i--) {
+                  if (updated[i].id === recordId && updated[i]._orderId === orderIdRef.current) {
+                    const patched = { ...updated[i] };
+                    if (diaVal !== '') patched.dia = parseFloat(diaVal);
+                    patched.hei = parseFloat(heiVal);
+                    updated[i] = patched;
+                    break;
+                  }
+                }
+                try { localStorage.setItem('battery_history', JSON.stringify(updated.slice(-500))); } catch {}
+                return updated.slice(-500);
+              });
+            }
             if (caliperSingleModeRef.current) {
               // Single mode — stop after measuring one battery
               setCaliperPhase(false);

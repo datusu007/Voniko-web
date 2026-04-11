@@ -20,7 +20,6 @@ import LoginPage from './pages/Login/LoginPage';
 import DashboardPage from './pages/Dashboard/DashboardPage';
 import FilesPage from './pages/Files/FilesPage';
 import FileDetailPage from './pages/FileDetail/FileDetailPage';
-import HistoryPage from './pages/History/HistoryPage';
 import UsersPage from './pages/Users/UsersPage';
 import ProfilePage from './pages/Profile/ProfilePage';
 import FoldersPage from './pages/Folders/FoldersPage';
@@ -81,7 +80,6 @@ function AppRoutes() {
             <Route index element={<DashboardPage />} />
             <Route path="files" element={<FilesPage />} />
             <Route path="files/:id" element={<FileDetailPage />} />
-            <Route path="history" element={<HistoryPage />} />
             <Route
               path="users"
               element={
