@@ -41,6 +41,8 @@ const OCV_TOLERANCE = 0.003;
 const CCV_TOLERANCE = 0.010;
 const Y_AXIS_PADDING_RATIO = 0.1;
 const MIN_Y_AXIS_PADDING = 0.01;
+const ZOOM_MODAL_TABLE_SCROLL_Y = 'calc(80vh - 120px)';
+const ZOOM_CHART_DATA_ZOOM = [{ type: 'inside', filterMode: 'none' }, { type: 'slider', height: 20, bottom: 4 }];
 
 function parseStandard(str) {
   if (!str || !str.trim()) return null;
@@ -916,7 +918,13 @@ export default function BatteryPage() {
       `<Row>${row.map((cell) => `<Cell><Data ss:Type="String">${escape(cell)}</Data></Cell>`).join('')}</Row>`
     ).join('');
 
-    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Battery History"><Table>${xmlRows}</Table></Worksheet></Workbook>`;
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Battery History">
+    <Table>${xmlRows}</Table>
+  </Worksheet>
+</Workbook>`;
 
     const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -1739,7 +1747,7 @@ export default function BatteryPage() {
         bodyStyle={{ background: '#111', padding: 8 }}
       >
         <ReactECharts
-          option={{ ...chartOption, dataZoom: [{ type: 'inside', filterMode: 'none' }, { type: 'slider', height: 20, bottom: 4 }] }}
+          option={{ ...chartOption, dataZoom: ZOOM_CHART_DATA_ZOOM }}
           style={{ height: 'calc(80vh - 60px)' }}
           notMerge={true}
           theme="dark"
@@ -1765,7 +1773,7 @@ export default function BatteryPage() {
             size="small"
             pagination={{ pageSize: 20, showSizeChanger: true }}
             locale={{ emptyText: t('batteryNoResults') }}
-            scroll={{ x: true, y: 'calc(80vh - 120px)' }}
+            scroll={{ x: true, y: ZOOM_MODAL_TABLE_SCROLL_Y }}
             rowClassName={(record) => {
               const ocvBad = ocvSpec && record.ocv != null && Math.abs(record.ocv - ocvSpec.center) > ocvSpec.tolerance;
               const ccvBad = ccvSpec && record.ccv != null && Math.abs(record.ccv - ccvSpec.center) > ccvSpec.tolerance;
@@ -1792,7 +1800,7 @@ export default function BatteryPage() {
             size="small"
             pagination={{ pageSize: 20, showSizeChanger: true }}
             locale={{ emptyText: t('batteryNoResults') }}
-            scroll={{ x: true, y: 'calc(80vh - 120px)' }}
+            scroll={{ x: true, y: ZOOM_MODAL_TABLE_SCROLL_Y }}
           />
         )}
       </Modal>
