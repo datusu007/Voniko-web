@@ -1,32 +1,51 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api/battery' });
+// ✅ Battery service chạy trực tiếp trên máy client
+const BATTERY_LOCAL_URL = 'http://localhost:8765';
 
-// Attach JWT from localStorage
-api.interceptors.request.use((config) => {
+const batteryApi = axios.create({ baseURL: BATTERY_LOCAL_URL });
+
+// Auth vẫn qua server
+const serverApi = axios.create({ baseURL: '/api/battery' });
+
+serverApi.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-export const getPorts = () => api.get('/ports');
-export const getStatus = () => api.get('/status');
-export const checkHealth = () => api.get('/health');
+// ✅ Các lệnh điều khiển → gọi thẳng localhost:8765
+export const getPorts    = () => batteryApi.get('/ports');
+export const getStatus   = () => batteryApi.get('/status');
+export const connectDevice = (data) => batteryApi.post('/connect', data);
+export const disconnectDevice = () => batteryApi.post('/disconnect');
+export const startTest   = (data) => batteryApi.post('/start', data);
+export const stopTest    = () => batteryApi.post('/stop');
+export const clearSession = () => batteryApi.delete('/session');
+
+// ✅ Stream SSE trực tiếp từ localhost
+export const getBatteryStreamUrl = () => `${BATTERY_LOCAL_URL}/stream`;
+
+// ✅ Download report → qua server (cần auth)
 export const downloadReport = () =>
-  api.get('/report/download', { responseType: 'blob' });
+  serverApi.get('/report/download', { responseType: 'blob' });
 
 export const uploadTemplate = (formData) =>
-  api.post('/upload-template', formData);
+  serverApi.post('/upload-template', formData);
 
-export const getTemplateInfo = () => api.get('/template-info');
+export const getTemplateInfo = () => serverApi.get('/template-info');
 
 export const downloadReportFromTemplate = (records) =>
-  api.post('/download-report', { records }, { responseType: 'blob' });
+  serverApi.post('/download-report', { records }, { responseType: 'blob' });
 
 export const uploadArchive = (formData) =>
-  api.post('/upload-archive', formData);
+  serverApi.post('/upload-archive', formData);
 
-export const getArchiveInfo = () => api.get('/archive-info');
+export const getArchiveInfo = () => serverApi.get('/archive-info');
 
 export const downloadArchiveReport = (records) =>
-  api.post('/download-archive-report', { records }, { responseType: 'blob' });
+  serverApi.post('/download-archive-report', { records }, { responseType: 'blob' });
+
+// ✅ Kiểm tra local service có chạy không
+export const checkLocalHealth = () =>
+  batteryApi.get('/ports', { timeout: 3000 });
