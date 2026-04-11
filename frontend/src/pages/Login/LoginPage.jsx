@@ -40,22 +40,12 @@ export default function LoginPage() {
       <div style={{ width: '100%', maxWidth: 420 }}>
         {/* Logo/Title */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{
-            width: 64,
-            height: 64,
-            background: '#0050b3',
-            borderRadius: 16,
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginBottom: 16,
-            boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-          }}>
-            <span style={{ fontSize: 32, fontWeight: 800, color: '#ffffff' }}>V</span>
-          </div>
-          <Title level={2} style={{ color: '#fff', margin: 0, fontWeight: 700 }}>
-            Voniko
-          </Title>
+          <img
+            src="/logo.svg"
+            alt="Voniko"
+            style={{ height: 64, maxWidth: 200, objectFit: 'contain', marginBottom: 8 }}
+          />
+          <br />
           <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 14 }}>
             {t('appTagline')}
           </Text>

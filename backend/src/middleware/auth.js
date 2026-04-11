@@ -36,7 +36,7 @@ function requireAdmin(req, res, next) {
 }
 
 function requireEngineerOrAbove(req, res, next) {
-  if (!req.user || !['admin', 'engineer', 'user'].includes(req.user.role)) {
+  if (!req.user || !['admin', 'engineer'].includes(req.user.role)) {
     return res.status(403).json({ message: 'Engineer or above access required' });
   }
   next();
