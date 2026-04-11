@@ -7,7 +7,7 @@ import {
 import {
   ReloadOutlined, DownloadOutlined, DeleteOutlined, PlayCircleOutlined,
   StopOutlined, DisconnectOutlined, ApiOutlined, InboxOutlined, QuestionCircleOutlined,
-  ExportOutlined,
+  ExportOutlined, FullscreenOutlined,
 } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import dayjs from 'dayjs';
@@ -41,6 +41,8 @@ const OCV_TOLERANCE = 0.003;
 const CCV_TOLERANCE = 0.010;
 const Y_AXIS_PADDING_RATIO = 0.1;
 const MIN_Y_AXIS_PADDING = 0.01;
+const ZOOM_MODAL_TABLE_SCROLL_Y = 'calc(80vh - 120px)';
+const ZOOM_CHART_DATA_ZOOM = [{ type: 'inside', filterMode: 'none' }, { type: 'slider', height: 20, bottom: 4 }];
 
 function parseStandard(str) {
   if (!str || !str.trim()) return null;
@@ -170,6 +172,8 @@ export default function BatteryPage() {
     }
   });
   const [activeTab, setActiveTab] = useState('results');
+  const [chartZoomVisible, setChartZoomVisible] = useState(false);
+  const [tableZoomVisible, setTableZoomVisible] = useState(false);
 
   // History tab filters
   const [historySearch, setHistorySearch] = useState('');
@@ -893,10 +897,10 @@ export default function BatteryPage() {
     });
   }, [historyRecords, historySearch, historyTypeFilter, historyLineFilter]);
 
-  const handleExportHistoryCsv = useCallback(() => {
+  const handleExportHistoryExcel = useCallback(() => {
     const headers = ['Date', 'Order ID', 'Battery Type', 'Product Line', 'ID', 'OCV (V)', 'CCV (V)', 'Time (s)', 'Dia (mm)', 'Hei (mm)', 'Status'];
     const rows = filteredHistory.map((r) => [
-      r._isoDate || r._session,
+      r._isoDate || r._session || '',
       r._orderId || '',
       r._batteryType || '',
       r._productLine || '',
@@ -908,14 +912,25 @@ export default function BatteryPage() {
       r.hei != null ? r.hei.toFixed(2) : '',
       r.status || '',
     ]);
-    const csv = [headers, ...rows]
-      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+
+    const escape = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const xmlRows = [headers, ...rows].map((row) =>
+      `<Row>${row.map((cell) => `<Cell><Data ss:Type="String">${escape(cell)}</Data></Cell>`).join('')}</Row>`
+    ).join('');
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+  <Worksheet ss:Name="Battery History">
+    <Table>${xmlRows}</Table>
+  </Worksheet>
+</Workbook>`;
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `battery_history_${dayjs().format('YYYY-MM-DD')}.csv`;
+    link.download = `battery_history_${dayjs().format('YYYY-MM-DD')}.xls`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1459,6 +1474,7 @@ export default function BatteryPage() {
                 </Checkbox>
               </Space>
             }
+            extra={<Button icon={<FullscreenOutlined />} size="small" onClick={() => setChartZoomVisible(true)} />}
             size="small"
             bodyStyle={{ padding: 8, background: '#111', borderRadius: '0 0 8px 8px' }}
           >
@@ -1477,7 +1493,7 @@ export default function BatteryPage() {
 
         {/* Results Table */}
         <Col xs={24} lg={10}>
-          <Card size="small" style={{ height: '100%' }}>
+          <Card size="small" style={{ height: '100%' }} extra={<Button icon={<FullscreenOutlined />} size="small" onClick={() => setTableZoomVisible(true)} />}>
             <Tabs
               activeKey={activeTab}
               onChange={setActiveTab}
@@ -1557,10 +1573,10 @@ export default function BatteryPage() {
                           <Button
                             size="small"
                             icon={<ExportOutlined />}
-                            onClick={handleExportHistoryCsv}
+                            onClick={handleExportHistoryExcel}
                             disabled={filteredHistory.length === 0}
                           >
-                            {t('batteryHistoryExportCsv')}
+                            {t('batteryHistoryExportExcel')}
                           </Button>
                         </Col>
                         <Col>
@@ -1718,6 +1734,74 @@ export default function BatteryPage() {
             <li><strong>{t('batteryDate')}:</strong> {savedSessionInfo.testDate || '-'}</li>
             <li><strong>{t('batteryResults')}:</strong> {savedSessionInfo.records?.length || 0} {t('batteryId')}</li>
           </ul>
+        )}
+      </Modal>
+      {/* Chart Zoom Modal */}
+      <Modal
+        open={chartZoomVisible}
+        onCancel={() => setChartZoomVisible(false)}
+        footer={null}
+        width="90vw"
+        title={t('batteryChart')}
+        destroyOnClose
+        bodyStyle={{ background: '#111', padding: 8 }}
+      >
+        <ReactECharts
+          option={{ ...chartOption, dataZoom: ZOOM_CHART_DATA_ZOOM }}
+          style={{ height: 'calc(80vh - 60px)' }}
+          notMerge={true}
+          theme="dark"
+          onEvents={{
+            legendselectchanged: (params) => setLegendSelected(params.selected),
+          }}
+        />
+      </Modal>
+      {/* Table Zoom Modal */}
+      <Modal
+        open={tableZoomVisible}
+        onCancel={() => setTableZoomVisible(false)}
+        footer={null}
+        width="90vw"
+        title={activeTab === 'history' ? t('batteryHistory') : t('batteryResults')}
+        destroyOnClose
+      >
+        {activeTab === 'results' ? (
+          <Table
+            dataSource={records}
+            columns={columns}
+            rowKey="id"
+            size="small"
+            pagination={{ pageSize: 20, showSizeChanger: true }}
+            locale={{ emptyText: t('batteryNoResults') }}
+            scroll={{ x: true, y: ZOOM_MODAL_TABLE_SCROLL_Y }}
+            rowClassName={(record) => {
+              const ocvBad = ocvSpec && record.ocv != null && Math.abs(record.ocv - ocvSpec.center) > ocvSpec.tolerance;
+              const ccvBad = ccvSpec && record.ccv != null && Math.abs(record.ccv - ccvSpec.center) > ccvSpec.tolerance;
+              return (ocvBad || ccvBad) ? 'battery-row-bad' : '';
+            }}
+          />
+        ) : (
+          <Table
+            dataSource={filteredHistory}
+            columns={[
+              { title: t('batteryDate'), dataIndex: '_session', key: '_session', width: 100 },
+              { title: t('batteryOrderId'), dataIndex: '_orderId', key: '_orderId', width: 100, render: (v) => v || '-' },
+              { title: t('batteryType'), dataIndex: '_batteryType', key: '_batteryType', width: 70, render: (v) => v || '-' },
+              { title: t('batteryProductLine'), dataIndex: '_productLine', key: '_productLine', width: 80, render: (v) => v || '-' },
+              { title: t('batteryId'), dataIndex: 'id', key: 'id', width: 50 },
+              { title: t('batteryOcv'), dataIndex: 'ocv', key: 'ocv', width: 80, render: (v) => v != null ? v.toFixed(3) : '-' },
+              { title: t('batteryCcv'), dataIndex: 'ccv', key: 'ccv', width: 80, render: (v) => v != null ? v.toFixed(3) : '-' },
+              { title: t('batteryTime'), dataIndex: 'time', key: 'time', width: 80, render: (v) => v != null ? String(v) : '-' },
+              { title: t('batteryCaliperDia'), dataIndex: 'dia', key: 'dia', width: 70, render: (v) => v != null ? parseFloat(v).toFixed(2) : '-' },
+              { title: t('batteryCaliperHei'), dataIndex: 'hei', key: 'hei', width: 70, render: (v) => v != null ? parseFloat(v).toFixed(2) : '-' },
+              { title: t('status'), dataIndex: 'status', key: 'status', width: 80, render: (v) => v ? <Tag color="blue">{v}</Tag> : '-' },
+            ]}
+            rowKey={(r, i) => `${r._session}_${r.id}_${i}`}
+            size="small"
+            pagination={{ pageSize: 20, showSizeChanger: true }}
+            locale={{ emptyText: t('batteryNoResults') }}
+            scroll={{ x: true, y: ZOOM_MODAL_TABLE_SCROLL_Y }}
+          />
         )}
       </Modal>
     </div>

@@ -421,6 +421,7 @@ export default {
   batteryCaliperSkip: '跳过此电池',
   batteryHistorySearch: '按订单号搜索...',
   batteryHistoryExportCsv: '导出CSV',
+  batteryHistoryExportExcel: '导出Excel',
   batteryHistoryAllTypes: '所有类型',
   batteryHistoryAllLines: '所有产线',
   workshops: '车间',
