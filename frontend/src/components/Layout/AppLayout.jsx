@@ -3,7 +3,6 @@ import { Layout, Menu, Avatar, Dropdown, Button, Space, Typography, Badge, Popov
 import {
   DashboardOutlined,
   FileOutlined,
-  HistoryOutlined,
   TeamOutlined,
   UserOutlined,
   LogoutOutlined,
@@ -50,7 +49,6 @@ export default function AppLayout() {
   const menuItems = [
     { key: '/', icon: <DashboardOutlined />, label: t('dashboard') },
     { key: '/files', icon: <FileOutlined />, label: t('files') },
-    { key: '/history', icon: <HistoryOutlined />, label: t('history') },
     { key: '/barcode', icon: <QrcodeOutlined />, label: t('barcode') },
     { key: '/battery', icon: <ThunderboltOutlined />, label: t('batteryTest') },
     ...(isAdmin ? [
