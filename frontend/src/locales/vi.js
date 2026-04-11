@@ -434,4 +434,9 @@ export default {
   folderImportHint: 'Định dạng CSV/Excel: xưởng, chuyền, máy, mô tả',
   folderImportSuccess: 'Nhập hoàn tất',
   folderExportSuccess: 'Xuất thành công',
+  engineerRole: 'Kỹ sư',
+  qcRole: 'QC',
+  resetPassword: 'Đặt lại mật khẩu',
+  resetPasswordSuccess: 'Đã đặt lại mật khẩu thành công',
+  folderManagement: 'Quản lý Folder',
 };

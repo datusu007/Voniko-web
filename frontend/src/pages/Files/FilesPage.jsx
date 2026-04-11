@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Table, Button, Space, Input, Typography, Tag, Tooltip,
-  Modal, Form, Upload, Select, message, Popconfirm, Card,
+  Modal, Form, Upload, Select, message, Popconfirm, Card, Tabs,
+  Row, Col, List, Empty,
 } from 'antd';
 import {
   UploadOutlined, PlusOutlined, SearchOutlined,
   DeleteOutlined, EyeOutlined, InboxOutlined, FolderOutlined, LockOutlined, TagOutlined, SyncOutlined,
+  EditOutlined, DownloadOutlined, BankOutlined, DesktopOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
-import api, { getFolders } from '../../api';
+import api, { getFolders, createFolder, updateFolder, deleteFolder } from '../../api';
 import { useLang } from '../../contexts/LangContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { removePendingUpload } from '../../utils/pendingUploads';
@@ -48,8 +50,20 @@ export default function FilesPage() {
   const [allTags, setAllTags] = useState([]);
   const [filterTagId, setFilterTagId] = useState(null);
 
+  // Folder management state
+  const [fmWorkshops, setFmWorkshops] = useState([]);
+  const [fmLines, setFmLines] = useState([]);
+  const [fmLoading, setFmLoading] = useState(false);
+  const [fmSelectedWorkshop, setFmSelectedWorkshop] = useState(null);
+  const [fmSelectedLine, setFmSelectedLine] = useState(null);
+  const [fmModalOpen, setFmModalOpen] = useState(false);
+  const [fmModalType, setFmModalType] = useState(null);
+  const [fmEditTarget, setFmEditTarget] = useState(null);
+  const [fmForm] = Form.useForm();
+  const [fmSaving, setFmSaving] = useState(false);
+
   const { t } = useLang();
-  const { canEdit, isAdmin } = useAuth();
+  const { user: currentUser, canEdit, isAdmin, isEngineer } = useAuth();
   const navigate = useNavigate();
 
   const fetchFolders = useCallback(async () => {
@@ -108,7 +122,35 @@ export default function FilesPage() {
     }
   }, [page, search, filterWorkshopId, filterLineId, filterMachineId, filterTagId]);
 
-  useEffect(() => { fetchFolders(); fetchTags(); }, []);
+  // Folder management fetch
+  const fetchFmFolders = useCallback(async () => {
+    setFmLoading(true);
+    try {
+      const res = await getFolders();
+      const wsData = res.data.workshops || [];
+      const linesData = res.data.lines || [];
+      setFmWorkshops(wsData);
+      setFmLines(linesData);
+      // refresh selected items
+      setFmSelectedWorkshop(prev => {
+        if (!prev) return prev;
+        const updated = wsData.find(w => w.id === prev.id);
+        return updated || null;
+      });
+      setFmSelectedLine(prev => {
+        if (!prev) return prev;
+        // find in workshop lines or standalone
+        const allLines = [...wsData.flatMap(w => w.lines || []), ...linesData];
+        return allLines.find(l => l.id === prev.id) || null;
+      });
+    } catch {
+      message.error(t('error'));
+    } finally {
+      setFmLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => { fetchFolders(); fetchTags(); fetchFmFolders(); }, []);
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
   const handleSearch = (value) => { setSearch(value); setPage(1); };
@@ -181,6 +223,12 @@ export default function FilesPage() {
     setUploadMachineId(null);
     setUploadFileId(null);
     setUploadFileName(null);
+  };
+
+  const canDeleteFile = (record) => {
+    if (isAdmin) return true;
+    if (isEngineer && record.createdById === currentUser?.id) return true;
+    return false;
   };
 
   const columns = [
@@ -270,7 +318,7 @@ export default function FilesPage() {
               />
             </Tooltip>
           )}
-          {(canEdit || isAdmin) && (
+          {canDeleteFile(record) && (
             <Popconfirm
               title={t('deleteFileConfirm')}
               onConfirm={() => handleDelete(record.id)}
@@ -287,6 +335,333 @@ export default function FilesPage() {
     },
   ];
 
+  // ---- Folder management helpers ----
+  const fmOpenAddWorkshop = () => {
+    setFmModalType('workshop'); setFmEditTarget(null); fmForm.resetFields(); setFmModalOpen(true);
+  };
+  const fmOpenAddLine = () => {
+    setFmModalType('line'); setFmEditTarget(null); fmForm.resetFields(); setFmModalOpen(true);
+  };
+  const fmOpenAddMachine = () => {
+    setFmModalType('machine'); setFmEditTarget(null); fmForm.resetFields(); setFmModalOpen(true);
+  };
+  const fmOpenEdit = (folder, type) => {
+    const editType = type === 'workshop' ? 'editWorkshop' : type === 'line' ? 'editLine' : 'editMachine';
+    setFmModalType(editType); setFmEditTarget(folder);
+    fmForm.setFieldsValue({ name: folder.name, description: folder.description });
+    setFmModalOpen(true);
+  };
+  const fmHandleSave = async (values) => {
+    setFmSaving(true);
+    try {
+      if (fmModalType === 'workshop') {
+        await createFolder({ name: values.name, type: 'workshop', description: values.description });
+        message.success(t('folderCreated'));
+      } else if (fmModalType === 'line') {
+        await createFolder({ name: values.name, type: 'line', parentId: fmSelectedWorkshop?.id || null, description: values.description });
+        message.success(t('folderCreated'));
+      } else if (fmModalType === 'machine') {
+        await createFolder({ name: values.name, type: 'machine', parentId: fmSelectedLine.id, description: values.description });
+        message.success(t('folderCreated'));
+      } else {
+        await updateFolder(fmEditTarget.id, { name: values.name, description: values.description });
+        message.success(t('folderUpdated'));
+      }
+      setFmModalOpen(false);
+      fmForm.resetFields();
+      await fetchFmFolders();
+      await fetchFolders();
+    } catch (err) {
+      message.error(err.response?.data?.message || t('error'));
+    } finally {
+      setFmSaving(false);
+    }
+  };
+  const fmHandleDelete = async (folder) => {
+    try {
+      await deleteFolder(folder.id);
+      message.success(t('folderDeleted'));
+      if (fmSelectedWorkshop?.id === folder.id) { setFmSelectedWorkshop(null); setFmSelectedLine(null); }
+      if (fmSelectedLine?.id === folder.id) setFmSelectedLine(null);
+      await fetchFmFolders();
+      await fetchFolders();
+    } catch (err) {
+      message.error(err.response?.data?.message || t('folderHasFiles'));
+    }
+  };
+  const fmHandleExport = async () => {
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch('/api/folders/export', { headers: { Authorization: `Bearer ${token}` } });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'folders.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const fmHandleImport = async ({ file, onSuccess, onError }) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await api.post('/folders/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      message.success(res.data.message);
+      onSuccess();
+      fetchFmFolders();
+      fetchFolders();
+    } catch (err) {
+      message.error(err.response?.data?.message || t('error'));
+      onError(err);
+    }
+  };
+
+  const fmModalTitle = {
+    workshop: t('addWorkshop'),
+    line: t('addLine'),
+    machine: t('addMachine'),
+    editWorkshop: t('edit') + ' ' + t('workshop'),
+    editLine: t('edit') + ' ' + t('line'),
+    editMachine: t('edit') + ' ' + t('machine'),
+  }[fmModalType];
+
+  const fmDisplayLines = fmSelectedWorkshop ? (fmSelectedWorkshop.lines || []) : fmLines;
+
+  // Tab items
+  const tabItems = [
+    {
+      key: 'files',
+      label: t('fileList'),
+      children: (
+        <Card>
+          <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            <Input.Search
+              placeholder={t('search')}
+              allowClear
+              onSearch={handleSearch}
+              style={{ maxWidth: 300 }}
+              prefix={<SearchOutlined />}
+            />
+            {(folders.workshops || []).length > 0 && (
+              <Select
+                allowClear
+                placeholder={t('allWorkshops')}
+                style={{ width: 180 }}
+                onChange={handleFilterWorkshop}
+                value={filterWorkshopId}
+              >
+                {(folders.workshops || []).map(w => <Option key={w.id} value={w.id}>{w.name}</Option>)}
+              </Select>
+            )}
+            <Select
+              allowClear
+              placeholder={t('allLines')}
+              style={{ width: 180 }}
+              onChange={handleFilterLine}
+              value={filterLineId}
+            >
+              {allFilterLines.map(l => <Option key={l.id} value={l.id}>{l.name}</Option>)}
+            </Select>
+            {filterLineId && (
+              <Select
+                allowClear
+                placeholder={t('allMachines')}
+                style={{ width: 180 }}
+                onChange={handleFilterMachine}
+                value={filterMachineId}
+              >
+                {filterMachines.map(m => <Option key={m.id} value={m.id}>{m.name}</Option>)}
+              </Select>
+            )}
+            {allTags.length > 0 && (
+              <Select
+                allowClear
+                placeholder={t('filterByTag')}
+                style={{ width: 160 }}
+                onChange={handleFilterTag}
+                value={filterTagId}
+                suffixIcon={<TagOutlined />}
+              >
+                {allTags.map(tag => (
+                  <Option key={tag.id} value={tag.id}>
+                    <Space size={4}>
+                      <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: tag.color }} />
+                      {tag.name}
+                    </Space>
+                  </Option>
+                ))}
+              </Select>
+            )}
+          </div>
+
+          <Table
+            columns={columns}
+            dataSource={files}
+            rowKey="id"
+            loading={loading}
+            pagination={{
+              current: page,
+              total,
+              pageSize: 20,
+              onChange: (p) => setPage(p),
+              showTotal: (tot) => `${tot} ${t('total')}`,
+            }}
+            size="middle"
+          />
+        </Card>
+      ),
+    },
+    ...(isAdmin || isEngineer ? [{
+      key: 'folders',
+      label: t('folderManagement'),
+      children: (
+        <div>
+          <Space style={{ marginBottom: 16 }}>
+            <Button icon={<DownloadOutlined />} onClick={fmHandleExport}>{t('folderExport')}</Button>
+            <Upload accept=".csv,.xlsx" showUploadList={false} customRequest={fmHandleImport}>
+              <Button icon={<UploadOutlined />}>{t('folderImport')}</Button>
+            </Upload>
+          </Space>
+
+          <Row gutter={16}>
+            <Col xs={24} md={8}>
+              <Card
+                title={<Space><BankOutlined /><span>{t('workshops')}</span></Space>}
+                extra={
+                  <Button type="primary" size="small" icon={<PlusOutlined />} onClick={fmOpenAddWorkshop}>
+                    {t('addWorkshop')}
+                  </Button>
+                }
+                loading={fmLoading}
+              >
+                {fmWorkshops.length === 0 ? (
+                  <Empty description={t('none')} />
+                ) : (
+                  <List
+                    dataSource={fmWorkshops}
+                    renderItem={(ws) => (
+                      <List.Item
+                        key={ws.id}
+                        style={{ cursor: 'pointer', background: fmSelectedWorkshop?.id === ws.id ? '#e6f4ff' : undefined, borderRadius: 6, padding: '8px 12px' }}
+                        onClick={() => { setFmSelectedWorkshop(ws); setFmSelectedLine(null); }}
+                        actions={[
+                          <Tooltip title={t('edit')} key="edit">
+                            <Button type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); fmOpenEdit(ws, 'workshop'); }} />
+                          </Tooltip>,
+                          <Popconfirm key="delete" title={t('deleteFileConfirm')} onConfirm={(e) => { e?.stopPropagation(); fmHandleDelete(ws); }} okText={t('yes')} cancelText={t('no')}>
+                            <Tooltip title={t('delete')}><Button type="text" size="small" icon={<DeleteOutlined />} danger onClick={(e) => e.stopPropagation()} /></Tooltip>
+                          </Popconfirm>,
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={<Text strong>{ws.name}</Text>}
+                          description={<Space size={4}><Tag color="purple">{ws.lines?.length || 0} {t('lines')}</Tag><Tag color="cyan">{ws.fileCount} files</Tag></Space>}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                )}
+              </Card>
+            </Col>
+
+            <Col xs={24} md={8}>
+              <Card
+                title={<Space><FolderOutlined /><span>{fmSelectedWorkshop ? `${t('lines')} — ${fmSelectedWorkshop.name}` : t('lines')}</span></Space>}
+                extra={<Button type="primary" size="small" icon={<PlusOutlined />} onClick={fmOpenAddLine}>{t('addLine')}</Button>}
+                loading={fmLoading}
+              >
+                {fmDisplayLines.length === 0 ? (
+                  <Empty description={t('none')} />
+                ) : (
+                  <List
+                    dataSource={fmDisplayLines}
+                    renderItem={(line) => (
+                      <List.Item
+                        key={line.id}
+                        style={{ cursor: 'pointer', background: fmSelectedLine?.id === line.id ? '#e6f4ff' : undefined, borderRadius: 6, padding: '8px 12px' }}
+                        onClick={() => setFmSelectedLine(line)}
+                        actions={[
+                          <Tooltip title={t('edit')} key="edit">
+                            <Button type="text" size="small" icon={<EditOutlined />} onClick={(e) => { e.stopPropagation(); fmOpenEdit(line, 'line'); }} />
+                          </Tooltip>,
+                          <Popconfirm key="delete" title={t('deleteFileConfirm')} onConfirm={(e) => { e?.stopPropagation(); fmHandleDelete(line); }} okText={t('yes')} cancelText={t('no')}>
+                            <Tooltip title={t('delete')}><Button type="text" size="small" icon={<DeleteOutlined />} danger onClick={(e) => e.stopPropagation()} /></Tooltip>
+                          </Popconfirm>,
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={<Text strong>{line.name}</Text>}
+                          description={<Space size={4}><Tag color="blue">{line.machines?.length || 0} {t('machines')}</Tag><Tag color="cyan">{line.fileCount} files</Tag></Space>}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                )}
+              </Card>
+            </Col>
+
+            <Col xs={24} md={8}>
+              <Card
+                title={<Space><DesktopOutlined /><span>{fmSelectedLine ? `${t('machines')} — ${fmSelectedLine.name}` : t('machines')}</span></Space>}
+                extra={fmSelectedLine && (
+                  <Button type="primary" size="small" icon={<PlusOutlined />} onClick={fmOpenAddMachine}>{t('addMachine')}</Button>
+                )}
+              >
+                {!fmSelectedLine ? (
+                  <Empty description={t('selectLine')} />
+                ) : (fmSelectedLine.machines || []).length === 0 ? (
+                  <Empty description={t('none')} />
+                ) : (
+                  <List
+                    dataSource={fmSelectedLine.machines}
+                    renderItem={(machine) => (
+                      <List.Item
+                        key={machine.id}
+                        actions={[
+                          <Tooltip title={t('edit')} key="edit">
+                            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => fmOpenEdit(machine, 'machine')} />
+                          </Tooltip>,
+                          <Popconfirm key="delete" title={t('deleteFileConfirm')} onConfirm={() => fmHandleDelete(machine)} okText={t('yes')} cancelText={t('no')}>
+                            <Tooltip title={t('delete')}><Button type="text" size="small" icon={<DeleteOutlined />} danger /></Tooltip>
+                          </Popconfirm>,
+                        ]}
+                      >
+                        <List.Item.Meta
+                          title={<Text>{machine.name}</Text>}
+                          description={<Space size={4}><Tag color="cyan">{machine.fileCount} files</Tag>{machine.description && <Text type="secondary">{machine.description}</Text>}</Space>}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                )}
+              </Card>
+            </Col>
+          </Row>
+
+          <Modal
+            title={fmModalTitle}
+            open={fmModalOpen}
+            onCancel={() => { setFmModalOpen(false); fmForm.resetFields(); }}
+            footer={null}
+            width={400}
+          >
+            <Form form={fmForm} layout="vertical" onFinish={fmHandleSave}>
+              <Form.Item name="name" label={t('folderName')} rules={[{ required: true, message: t('folderName') + ' ' + t('error') }]}>
+                <Input />
+              </Form.Item>
+              <Form.Item name="description" label={`${t('description')} ${t('optional')}`}>
+                <Input.TextArea rows={2} />
+              </Form.Item>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <Button onClick={() => { setFmModalOpen(false); fmForm.resetFields(); }}>{t('cancel')}</Button>
+                <Button type="primary" htmlType="submit" loading={fmSaving}>{t('save')}</Button>
+              </div>
+            </Form>
+          </Modal>
+        </div>
+      ),
+    }] : []),
+  ];
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -298,82 +673,7 @@ export default function FilesPage() {
         )}
       </div>
 
-      <Card>
-        <div style={{ marginBottom: 16, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          <Input.Search
-            placeholder={t('search')}
-            allowClear
-            onSearch={handleSearch}
-            style={{ maxWidth: 300 }}
-            prefix={<SearchOutlined />}
-          />
-          {(folders.workshops || []).length > 0 && (
-            <Select
-              allowClear
-              placeholder={t('allWorkshops')}
-              style={{ width: 180 }}
-              onChange={handleFilterWorkshop}
-              value={filterWorkshopId}
-            >
-              {(folders.workshops || []).map(w => <Option key={w.id} value={w.id}>{w.name}</Option>)}
-            </Select>
-          )}
-          <Select
-            allowClear
-            placeholder={t('allLines')}
-            style={{ width: 180 }}
-            onChange={handleFilterLine}
-            value={filterLineId}
-          >
-            {allFilterLines.map(l => <Option key={l.id} value={l.id}>{l.name}</Option>)}
-          </Select>
-          {filterLineId && (
-            <Select
-              allowClear
-              placeholder={t('allMachines')}
-              style={{ width: 180 }}
-              onChange={handleFilterMachine}
-              value={filterMachineId}
-            >
-              {filterMachines.map(m => <Option key={m.id} value={m.id}>{m.name}</Option>)}
-            </Select>
-          )}
-          {allTags.length > 0 && (
-            <Select
-              allowClear
-              placeholder={t('filterByTag')}
-              style={{ width: 160 }}
-              onChange={handleFilterTag}
-              value={filterTagId}
-              suffixIcon={<TagOutlined />}
-            >
-              {allTags.map(tag => (
-                <Option key={tag.id} value={tag.id}>
-                  <Space size={4}>
-                    <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: tag.color }} />
-                    {tag.name}
-                  </Space>
-                </Option>
-              ))}
-            </Select>
-          )}
-        </div>
-
-        <Table
-          columns={columns}
-          dataSource={files}
-          rowKey="id"
-          loading={loading}
-          pagination={{
-            current: page,
-            total,
-            pageSize: 20,
-            onChange: (p) => setPage(p),
-            showTotal: (tot) => `${tot} ${t('total')}`,
-          }}
-          size="middle"
-        />
-      </Card>
+      <Tabs items={tabItems} />
 
       <Modal
         title={uploadFileId ? t('uploadNewVersion') : t('uploadFile')}

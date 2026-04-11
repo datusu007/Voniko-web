@@ -3,7 +3,7 @@ import {
   Card, Table, Button, Space, Typography, Tag, Modal, Form,
   Input, Select, message, Popconfirm, Avatar, Badge, Tooltip,
 } from 'antd';
-import { PlusOutlined, EditOutlined, StopOutlined, UserOutlined, CheckOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, StopOutlined, UserOutlined, CheckOutlined, KeyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import api from '../../api';
 import { useLang } from '../../contexts/LangContext';
@@ -18,6 +18,10 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState(null);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [form] = Form.useForm();
+  const [resetPwdModal, setResetPwdModal] = useState(false);
+  const [resetPwdUser, setResetPwdUser] = useState(null);
+  const [resetPwdForm] = Form.useForm();
+  const [resetPwdLoading, setResetPwdLoading] = useState(false);
 
   const { t, lang } = useLang();
   const { user: currentUser } = useAuth();
@@ -100,13 +104,32 @@ export default function UsersPage() {
     }
   };
 
+  const openResetPwd = (user) => {
+    setResetPwdUser(user);
+    resetPwdForm.resetFields();
+    setResetPwdModal(true);
+  };
+
+  const handleResetPassword = async (values) => {
+    setResetPwdLoading(true);
+    try {
+      await api.put(`/users/${resetPwdUser.id}/reset-password`, { password: values.password });
+      message.success(t('resetPasswordSuccess'));
+      setResetPwdModal(false);
+    } catch (err) {
+      message.error(err.response?.data?.message || t('error'));
+    } finally {
+      setResetPwdLoading(false);
+    }
+  };
+
   const roleLabel = (role) => {
-    const map = { admin: t('admin'), user: t('userRole'), viewer: t('viewer') };
+    const map = { admin: t('admin'), user: t('userRole'), viewer: t('viewer'), engineer: t('engineerRole'), qc: t('qcRole') };
     return map[role] || role;
   };
 
   const roleColor = (role) => {
-    const map = { admin: 'red', user: 'blue', viewer: 'default' };
+    const map = { admin: 'red', user: 'blue', viewer: 'default', engineer: 'green', qc: 'orange' };
     return map[role] || 'default';
   };
 
@@ -168,6 +191,13 @@ export default function UsersPage() {
             onClick={() => openEdit(record)}
           >
             {t('edit')}
+          </Button>
+          <Button
+            size="small"
+            icon={<KeyOutlined />}
+            onClick={() => openResetPwd(record)}
+          >
+            {t('resetPassword')}
           </Button>
           {record.id !== currentUser?.id && (
             record.isActive ? (
@@ -265,7 +295,9 @@ export default function UsersPage() {
               disabled={!!editUser && editUser.id === currentUser?.id}
               options={[
                 { value: 'admin', label: t('admin') },
+                { value: 'engineer', label: t('engineerRole') },
                 { value: 'user', label: t('userRole') },
+                { value: 'qc', label: t('qcRole') },
                 { value: 'viewer', label: t('viewer') },
               ]}
             />
@@ -280,6 +312,30 @@ export default function UsersPage() {
             <Button onClick={() => setModalOpen(false)}>{t('cancel')}</Button>
             <Button type="primary" htmlType="submit" loading={submitLoading}>
               {t('save')}
+            </Button>
+          </div>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={`${t('resetPassword')} — ${resetPwdUser?.displayName || ''}`}
+        open={resetPwdModal}
+        onCancel={() => setResetPwdModal(false)}
+        footer={null}
+        width={400}
+      >
+        <Form form={resetPwdForm} layout="vertical" onFinish={handleResetPassword}>
+          <Form.Item
+            name="password"
+            label={t('newPassword')}
+            rules={[{ required: true }, { min: 6, message: t('passwordTooShort') }]}
+          >
+            <Input.Password placeholder="••••••" />
+          </Form.Item>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <Button onClick={() => setResetPwdModal(false)}>{t('cancel')}</Button>
+            <Button type="primary" htmlType="submit" loading={resetPwdLoading} icon={<KeyOutlined />}>
+              {t('resetPassword')}
             </Button>
           </div>
         </Form>

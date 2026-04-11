@@ -35,4 +35,11 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { authenticateToken, requireAdmin };
+function requireEngineerOrAbove(req, res, next) {
+  if (!req.user || !['admin', 'engineer', 'user'].includes(req.user.role)) {
+    return res.status(403).json({ message: 'Engineer or above access required' });
+  }
+  next();
+}
+
+module.exports = { authenticateToken, requireAdmin, requireEngineerOrAbove };

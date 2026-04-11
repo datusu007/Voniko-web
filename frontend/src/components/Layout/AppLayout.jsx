@@ -28,7 +28,7 @@ const { Header, Sider, Content } = Layout;
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isQC } = useAuth();
   const { t, lang, switchLang } = useLang();
   const { notifications, unreadCount, markAllRead, clearNotifications, dbNotifications, dbUnreadCount } = useNotifications();
   const totalUnread = unreadCount + dbUnreadCount;
@@ -47,12 +47,13 @@ export default function AppLayout() {
   }, []);
 
   const menuItems = [
-    { key: '/', icon: <DashboardOutlined />, label: t('dashboard') },
-    { key: '/files', icon: <FileOutlined />, label: t('files') },
+    ...(!isQC ? [
+      { key: '/', icon: <DashboardOutlined />, label: t('dashboard') },
+      { key: '/files', icon: <FileOutlined />, label: t('files') },
+    ] : []),
     { key: '/barcode', icon: <QrcodeOutlined />, label: t('barcode') },
     { key: '/battery', icon: <ThunderboltOutlined />, label: t('batteryTest') },
     ...(isAdmin ? [
-      { key: '/folders', icon: <FolderOutlined />, label: t('folders') },
       { key: '/users', icon: <TeamOutlined />, label: t('users') },
     ] : []),
   ];
