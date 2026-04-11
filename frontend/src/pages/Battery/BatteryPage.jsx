@@ -184,6 +184,10 @@ export default function BatteryPage() {
   const [resumeModalVisible, setResumeModalVisible] = useState(false);
   const [savedSessionInfo, setSavedSessionInfo] = useState(null);
 
+  // Order ID change warning modal
+  const [orderIdChangeModalVisible, setOrderIdChangeModalVisible] = useState(false);
+  const [pendingOrderId, setPendingOrderId] = useState('');
+
   // Excel report template
   const [templateName, setTemplateName] = useState(() => localStorage.getItem('battery_template_name') || null);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
@@ -1152,7 +1156,15 @@ export default function BatteryPage() {
                 <Form.Item label={t('batteryOrderId')} style={{ marginBottom: 0 }}>
                   <Input
                     value={orderId}
-                    onChange={(e) => setOrderId(e.target.value)}
+                    onChange={(e) => {
+                      const newVal = e.target.value;
+                      if (records.length > 0 && newVal !== orderId) {
+                        setPendingOrderId(newVal);
+                        setOrderIdChangeModalVisible(true);
+                      } else {
+                        setOrderId(newVal);
+                      }
+                    }}
                     disabled={inputsDisabled}
                     placeholder="e.g. ORD-001"
                   />
@@ -1738,6 +1750,26 @@ export default function BatteryPage() {
           </ul>
         )}
       </Modal>
+      {/* Order ID Change Warning Modal */}
+      <Modal
+        open={orderIdChangeModalVisible}
+        title={<Space><span style={{ color: '#faad14' }}>⚠️</span><span>{t('batteryOrderIdChangeTitle')}</span></Space>}
+        closable={false}
+        maskClosable={false}
+        keyboard={false}
+        footer={[
+          <Button key="cancel" onClick={() => { setPendingOrderId(''); setOrderIdChangeModalVisible(false); }}>{t('cancel')}</Button>,
+          <Button key="confirm" type="primary" danger onClick={() => { setOrderId(pendingOrderId); setPendingOrderId(''); setOrderIdChangeModalVisible(false); }}>{t('confirm')}</Button>,
+        ]}
+      >
+        <p>{t('batteryOrderIdChangeDesc')}</p>
+        <ul>
+          <li><strong>{t('batteryOrderIdChangeCurrent')}:</strong> {orderId || '-'}</li>
+          <li><strong>{t('batteryOrderIdChangeNew')}:</strong> {pendingOrderId || '-'}</li>
+          <li><strong>{t('batteryResults')}:</strong> {records.length} {t('batteryId')}</li>
+        </ul>
+        <p style={{ color: '#ff4d4f', marginTop: 8 }}>{t('batteryOrderIdChangeWarning')}</p>
+      </Modal>
       {/* Chart Zoom Modal */}
       <Modal
         open={chartZoomVisible}
@@ -1773,7 +1805,12 @@ export default function BatteryPage() {
             columns={columns}
             rowKey="id"
             size="small"
-            pagination={{ pageSize: 20, showSizeChanger: true }}
+            pagination={{
+              pageSize: 20,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}`,
+            }}
             locale={{ emptyText: t('batteryNoResults') }}
             scroll={{ x: true, y: ZOOM_MODAL_TABLE_SCROLL_Y }}
             rowClassName={(record) => {
@@ -1800,7 +1837,12 @@ export default function BatteryPage() {
             ]}
             rowKey={(r, i) => `${r._session}_${r.id}_${i}`}
             size="small"
-            pagination={{ pageSize: 20, showSizeChanger: true }}
+            pagination={{
+              pageSize: 20,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+              showTotal: (total, range) => `${range[0]}-${range[1]} / ${total}`,
+            }}
             locale={{ emptyText: t('batteryNoResults') }}
             scroll={{ x: true, y: ZOOM_MODAL_TABLE_SCROLL_Y }}
           />

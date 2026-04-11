@@ -154,14 +154,14 @@ export default function AppLayout() {
           borderBottom: '1px solid rgba(255,255,255,0.1)',
         }}>
           {collapsed ? (
-            <Typography.Text style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>P</Typography.Text>
+            <Typography.Text style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>V</Typography.Text>
           ) : (
             <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
               <Typography.Text style={{ color: '#fff', fontSize: 16, fontWeight: 700, letterSpacing: 1 }}>
-                PLC Control
+                Voniko
               </Typography.Text>
               <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
-                Version Manager
+                Manufacturing System
               </Typography.Text>
             </Space>
           )}
