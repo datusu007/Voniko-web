@@ -124,12 +124,12 @@ export default function UsersPage() {
   };
 
   const roleLabel = (role) => {
-    const map = { admin: t('admin'), user: t('userRole'), qc: t('qcRole') };
+    const map = { admin: t('admin'), user: t('userRole'), viewer: t('viewer'), engineer: t('engineerRole'), qc: t('qcRole') };
     return map[role] || role;
   };
 
   const roleColor = (role) => {
-    const map = { admin: 'red', user: 'blue', qc: 'orange' };
+    const map = { admin: 'red', user: 'blue', viewer: 'default', engineer: 'green', qc: 'orange' };
     return map[role] || 'default';
   };
 
@@ -298,6 +298,8 @@ export default function UsersPage() {
               options={[
                 { value: 'admin', label: t('admin') },
                 { value: 'user', label: t('userRole') },
+                { value: 'engineer', label: t('engineerRole') },
+                { value: 'viewer', label: t('viewer') },
                 { value: 'qc', label: t('qcRole') },
               ]}
             />

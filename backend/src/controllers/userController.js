@@ -39,8 +39,8 @@ async function createUser(req, res) {
   if (!username || !password || !displayName) {
     return res.status(400).json({ message: 'username, password, displayName required' });
   }
-  if (!['admin', 'user', 'viewer'].includes(role)) {
-    return res.status(400).json({ message: 'Invalid role. Use: admin, user, viewer' });
+  if (!['admin', 'user', 'viewer', 'engineer', 'qc'].includes(role)) {
+    return res.status(400).json({ message: 'Invalid role. Use: admin, user, viewer, engineer, qc' });
   }
 
   const db = getDb();
@@ -91,7 +91,7 @@ async function updateUser(req, res) {
   const { displayName, role, isActive } = req.body;
   const db = getDb();
 
-  const user = db.prepare('SELECT id FROM users WHERE id = ?').get(req.params.id);
+  const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ message: 'User not found' });
 
   // Prevent admin from deactivating themselves
@@ -114,7 +114,7 @@ async function updateUser(req, res) {
 
   if (displayName !== undefined) { updates.push('display_name = ?'); values.push(displayName.trim()); }
   if (role !== undefined) {
-    if (!['admin', 'user', 'viewer'].includes(role)) {
+    if (!['admin', 'user', 'viewer', 'engineer', 'qc'].includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
     updates.push('role = ?'); values.push(role);
@@ -131,7 +131,7 @@ async function updateUser(req, res) {
   db.prepare(`
     INSERT INTO activity_log (id, user_id, action, entity_type, entity_id, entity_name)
     VALUES (?, ?, 'update_user', 'user', ?, ?)
-  `).run(uuidv4(), req.user.id, req.params.id, user.id);
+  `).run(uuidv4(), req.user.id, req.params.id, user.username);
 
   res.json({ message: 'User updated' });
 }
