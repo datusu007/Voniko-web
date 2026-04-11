@@ -545,6 +545,28 @@ export default function BatteryPage() {
     setChartSeriesByBattery({});
   };
 
+  // Order ID change: end current session and start fresh with new ID
+  const handleEndSessionForOrderIdChange = () => {
+    handleClearSession();
+    setOrderId(pendingOrderId);
+    setPendingOrderId('');
+    setOrderIdChangeModalVisible(false);
+  };
+
+  // Order ID change: keep all results and re-tag every record with the new ID
+  const handleRenameAllOrderId = () => {
+    const newId = pendingOrderId;
+    const oldId = orderId;
+    setHistoryRecords((prev) => {
+      const updated = prev.map((r) => (r._orderId === oldId ? { ...r, _orderId: newId } : r));
+      try { localStorage.setItem('battery_history', JSON.stringify(updated.slice(-500))); } catch {}
+      return updated.slice(-500);
+    });
+    setOrderId(newId);
+    setPendingOrderId('');
+    setOrderIdChangeModalVisible(false);
+  };
+
   // Skip current battery (advance without saving dimensions)
   const handleSaveCaliper = useCallback(() => {
     if (caliperSingleMode) {
@@ -1759,7 +1781,8 @@ export default function BatteryPage() {
         keyboard={false}
         footer={[
           <Button key="cancel" onClick={() => { setPendingOrderId(''); setOrderIdChangeModalVisible(false); }}>{t('cancel')}</Button>,
-          <Button key="confirm" type="primary" danger onClick={() => { setOrderId(pendingOrderId); setPendingOrderId(''); setOrderIdChangeModalVisible(false); }}>{t('confirm')}</Button>,
+          <Button key="endSession" danger onClick={handleEndSessionForOrderIdChange}>{t('batteryOrderIdChangeEndSession')}</Button>,
+          <Button key="renameAll" type="primary" onClick={handleRenameAllOrderId}>{t('batteryOrderIdChangeRenameAll')}</Button>,
         ]}
       >
         <p>{t('batteryOrderIdChangeDesc')}</p>
@@ -1768,6 +1791,16 @@ export default function BatteryPage() {
           <li><strong>{t('batteryOrderIdChangeNew')}:</strong> {pendingOrderId || '-'}</li>
           <li><strong>{t('batteryResults')}:</strong> {records.length} {t('batteryId')}</li>
         </ul>
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ background: '#fff1f0', border: '1px solid #ffccc7', borderRadius: 6, padding: '8px 12px' }}>
+            <strong style={{ color: '#cf1322' }}>{t('batteryOrderIdChangeEndSession')}:</strong>
+            <span style={{ marginLeft: 6 }}>{t('batteryOrderIdChangeEndSessionDesc')}</span>
+          </div>
+          <div style={{ background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6, padding: '8px 12px' }}>
+            <strong style={{ color: '#389e0d' }}>{t('batteryOrderIdChangeRenameAll')}:</strong>
+            <span style={{ marginLeft: 6 }}>{t('batteryOrderIdChangeRenameAllDesc')}</span>
+          </div>
+        </div>
         <p style={{ color: '#ff4d4f', marginTop: 8 }}>{t('batteryOrderIdChangeWarning')}</p>
       </Modal>
       {/* Chart Zoom Modal */}
