@@ -22,7 +22,6 @@ import FilesPage from './pages/Files/FilesPage';
 import FileDetailPage from './pages/FileDetail/FileDetailPage';
 import UsersPage from './pages/Users/UsersPage';
 import ProfilePage from './pages/Profile/ProfilePage';
-import FoldersPage from './pages/Folders/FoldersPage';
 import BackupViewerPage from './pages/BackupViewer/BackupViewerPage';
 import BarcodePage from './pages/Barcode/BarcodePage';
 import BatteryPage from './pages/Battery/BatteryPage';
@@ -45,6 +44,12 @@ function AdminRoute({ children }) {
   if (loading) return null;
   if (!user || user.role !== 'admin') return <Navigate to="/" replace />;
   return children;
+}
+
+function QCRedirect() {
+  const { isQC } = useAuth();
+  if (isQC) return <Navigate to="/barcode" replace />;
+  return <DashboardPage />;
 }
 
 function AppRoutes() {
@@ -77,7 +82,7 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<DashboardPage />} />
+            <Route index element={<QCRedirect />} />
             <Route path="files" element={<FilesPage />} />
             <Route path="files/:id" element={<FileDetailPage />} />
             <Route
@@ -85,14 +90,6 @@ function AppRoutes() {
               element={
                 <AdminRoute>
                   <UsersPage />
-                </AdminRoute>
-              }
-            />
-            <Route
-              path="folders"
-              element={
-                <AdminRoute>
-                  <FoldersPage />
                 </AdminRoute>
               }
             />

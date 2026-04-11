@@ -434,4 +434,9 @@ export default {
   folderImportHint: 'CSV/Excel format: workshop, line, machine, description',
   folderImportSuccess: 'Import completed',
   folderExportSuccess: 'Exported successfully',
+  engineerRole: 'Engineer',
+  qcRole: 'QC',
+  resetPassword: 'Reset Password',
+  resetPasswordSuccess: 'Password reset successfully',
+  folderManagement: 'Folder Management',
 };

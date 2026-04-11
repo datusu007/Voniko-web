@@ -53,9 +53,11 @@ export function AuthProvider({ children }) {
   const isAdmin = user?.role === 'admin';
   const isViewer = user?.role === 'viewer';
   const canEdit = user?.role === 'admin' || user?.role === 'user';
+  const isEngineer = user?.role === 'engineer' || user?.role === 'user';
+  const isQC = user?.role === 'qc';
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, isAdmin, isViewer, canEdit }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, refreshUser, isAdmin, isViewer, canEdit, isEngineer, isQC }}>
       {children}
     </AuthContext.Provider>
   );

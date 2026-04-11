@@ -71,6 +71,7 @@ async function listFiles(req, res) {
         lastModified: f.last_modified,
         currentSize: f.current_size,
         createdBy: f.creator_name,
+        createdById: f.created_by,
         createdAt: f.created_at,
         lockedBy: f.locked_by || null,
         lockedAt: f.locked_at || null,
@@ -351,8 +352,10 @@ async function deleteFile(req, res) {
   const file = db.prepare('SELECT * FROM files WHERE id = ? AND is_deleted = 0').get(req.params.id);
   if (!file) return res.status(404).json({ message: 'File not found' });
 
-  // Only admin or the creator can delete
-  if (req.user.role !== 'admin' && file.created_by !== req.user.id) {
+  // Only admin can delete any file; engineer/user can only delete their own files
+  const canDelete = req.user.role === 'admin' ||
+    (['engineer', 'user'].includes(req.user.role) && file.created_by === req.user.id);
+  if (!canDelete) {
     return res.status(403).json({ message: 'Not authorized to delete this file' });
   }
 
