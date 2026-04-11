@@ -131,7 +131,7 @@ export default function BatteryPage() {
   const [chartData, setChartData] = useState(() => getInitialSession().chartData || []);
   const [chartDataOCV, setChartDataOCV] = useState(() => getInitialSession().chartDataOCV || []);
   const [chartDataCCV, setChartDataCCV] = useState(() => getInitialSession().chartDataCCV || []);
-  const [chartSeriesByBattery, setChartSeriesByBattery] = useState({});
+  const [chartSeriesByBattery, setChartSeriesByBattery] = useState(() => getInitialSession().chartSeriesByBattery || {});
   const [autoScroll, setAutoScroll] = useState(true);
   const [legendSelected, setLegendSelected] = useState({ OCV: true, CCV: true });
 
@@ -161,7 +161,7 @@ export default function BatteryPage() {
   useEffect(() => { recordsLengthRef.current = records.length; recordsRef.current = records; }, [records]);
 
   // Readings grouped by battery id for mini chart popover
-  const [readingsByBattery, setReadingsByBattery] = useState({});
+  const [readingsByBattery, setReadingsByBattery] = useState(() => getInitialSession().readingsByBattery || {});
 
   // History tab — persistent across reloads via localStorage
   const [historyRecords, setHistoryRecords] = useState(() => {
@@ -1001,10 +1001,12 @@ export default function BatteryPage() {
         productLine,
         ocvCenter,
         ccvCenter,
+        chartSeriesByBattery,
+        readingsByBattery,
       };
       localStorage.setItem('battery_session', JSON.stringify(sessionData));
     } catch {}
-  }, [records, chartData, chartDataOCV, chartDataCCV, orderId, testDate, batteryType, productLine, ocvCenter, ccvCenter]);
+  }, [records, chartData, chartDataOCV, chartDataCCV, orderId, testDate, batteryType, productLine, ocvCenter, ccvCenter, chartSeriesByBattery, readingsByBattery]);
 
   useEffect(() => {
     try {
