@@ -12,7 +12,7 @@ import {
 import ReactECharts from 'echarts-for-react';
 import dayjs from 'dayjs';
 import { useLang } from '../../contexts/LangContext';
-import { uploadTemplate, getTemplateInfo, downloadReportFromTemplate, uploadArchive, getArchiveInfo, downloadArchiveReport } from '../../api/battery';
+import { getPorts, connectDevice, disconnectDevice, startTest, stopTest, clearSession, getStatus, checkLocalHealth, getBatteryStreamUrl, uploadTemplate, getTemplateInfo, downloadReportFromTemplate, uploadArchive, getArchiveInfo, downloadArchiveReport } from '../../api/battery';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -96,6 +96,47 @@ function RowWithPopover({ record, readingsByBattery, buildMiniChartOption, ...ro
 
 export default function BatteryPage() {
   const { t, lang } = useLang();
+  const sseRef = useRef(null);
+  const [serviceOnline, setServiceOnline] = useState(false);
+  const [serviceError, setServiceError] = useState('');
+
+  // ✅ Kiểm tra local Python service
+  const checkService = useCallback(async () => {
+    try {
+      await checkLocalHealth();
+      setServiceOnline(true);
+      setServiceError('');
+    } catch {
+      setServiceOnline(false);
+      setServiceError(
+        'Python service chưa chạy. Hãy chạy battery_service.py trên máy này!'
+      );
+    }
+  }, []);
+
+  // ✅ Kết nối SSE trực tiếp
+  const connectSSE = useCallback(() => {
+    if (sseRef.current) sseRef.current.close();
+    const es = new EventSource(getBatteryStreamUrl());
+    sseRef.current = es;
+    es.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        handleSseMessage(msg); // logic xử lý giữ nguyên như handleWsMessage cũ
+      } catch { }
+    };
+    es.onerror = () => {
+      // SSE tự reconnect
+    };
+  }, []);
+
+  useEffect(() => {
+    checkService();
+    connectSSE();
+    return () => {
+      if (sseRef.current) sseRef.current.close();
+    };
+  }, []);
 
   // Connection state
   const [ports, setPorts] = useState([]);
@@ -252,7 +293,7 @@ export default function BatteryPage() {
                     break;
                   }
                 }
-                try { localStorage.setItem('battery_history', JSON.stringify(updated.slice(-500))); } catch {}
+                try { localStorage.setItem('battery_history', JSON.stringify(updated.slice(-500))); } catch { }
                 return updated.slice(-500);
               });
             }
@@ -409,7 +450,7 @@ export default function BatteryPage() {
               _productLine: productLineRef.current,
             };
             const next = [...prev, entry];
-            try { localStorage.setItem('battery_history', JSON.stringify(next.slice(-500))); } catch {}
+            try { localStorage.setItem('battery_history', JSON.stringify(next.slice(-500))); } catch { }
             return next.slice(-500);
           });
           // Reset caliper values after saving to record
@@ -501,34 +542,67 @@ export default function BatteryPage() {
   }, [connectWs]);
 
   // Refresh port list
-  const handleRefreshPorts = () => {
-    sendMsg({ action: 'get_ports' });
+  const handleRefreshPorts = async () => {
+    try {
+      const res = await getPorts();
+      setPorts(res.data.ports || []);
+    } catch {
+      notification.error({ message: 'Không thể lấy danh sách cổng' });
+    }
   };
 
   // Connect to device
-  const handleConnect = () => {
+  const handleConnect = async () => {
     if (!simMode && !port) {
       notification.warning({ message: t('batterySelectPort') });
       return;
     }
     setConnecting(true);
-    sendMsg({
-      action: 'connect',
-      payload: { port: simMode ? null : port, baud_rate: baudRate, simulation: simMode },
-    });
+    try {
+      const res = await connectDevice({
+        port: simMode ? null : port,
+        baud_rate: baudRate,
+        simulation: simMode,
+      });
+      setConnected(true);
+      notification.success({
+        message: t('batteryConnectSuccess'),
+        description: res.data.message,
+      });
+    } catch (e) {
+      setConnected(false);
+      notification.error({
+        message: t('batteryConnectFailed'),
+        description: e.response?.data?.detail || e.message,
+      });
+    } finally {
+      setConnecting(false);
+    }
   };
 
+
   // Disconnect
-  const handleDisconnect = () => {
-    sendMsg({ action: 'disconnect' });
+  const handleDisconnect = async () => {
+    try {
+      await disconnectDevice();
+      setConnected(false);
+      setRunning(false);
+    } catch { }
   };
 
   // Start / stop test
-  const handleStartStop = () => {
+  const handleStartStop = async () => {
     if (running) {
-      sendMsg({ action: 'stop' });
+      await stopTest();
     } else {
-      sendMsg({ action: 'start', payload: buildParams() });
+      try {
+        await startTest(buildParams());
+      } catch (e) {
+        notification.error({
+          message: t('error'),
+          description: e.response?.data?.detail || e.message,
+        });
+      }
     }
   };
 
@@ -537,13 +611,46 @@ export default function BatteryPage() {
     sendMsg({ action: 'start', payload: { ...buildParams(), retest_id: record.id } });
   };
 
-  // Clear session
-  const handleClearSession = () => {
-    sendMsg({ action: 'clear_session' });
-    localStorage.removeItem('battery_session');
-    setReadingsByBattery({});
+  const handleClearSession = async () => {
+    await clearSession();
+    setChartData([]);
+    setChartDataOCV([]);
+    setChartDataCCV([]);
     setChartSeriesByBattery({});
+    setRecords([]);
+    setReadingsByBattery({});
+    localStorage.removeItem('battery_session');
   };
+  if (!serviceOnline) {
+    return (
+      <div style={{ padding: 40 }}>
+        <Alert
+          type="error"
+          showIcon
+          message="Python Battery Service chưa chạy"
+          description={
+            <div>
+              <p>{serviceError}</p>
+              <p>Chạy lệnh sau trên máy này:</p>
+              <pre style={{ background: '#f5f5f5', padding: 12, borderRadius: 6 }}>
+                {`cd hardware-services
+                  venv\\Scripts\\activate
+                  uvicorn battery_service:app --host 0.0.0.0 --port 8765`}
+              </pre>
+              <Button
+                type="primary"
+                icon={<ReloadOutlined />}
+                onClick={checkService}
+                style={{ marginTop: 8 }}
+              >
+                Kiểm tra lại
+              </Button>
+            </div>
+          }
+        />
+      </div>
+    );
+  }
 
   // Order ID change: end current session and start fresh with new ID
   const handleEndSessionForOrderIdChange = () => {
@@ -559,7 +666,7 @@ export default function BatteryPage() {
     const oldId = orderId;
     setHistoryRecords((prev) => {
       const updated = prev.map((r) => (r._orderId === oldId ? { ...r, _orderId: newId } : r));
-      try { localStorage.setItem('battery_history', JSON.stringify(updated.slice(-500))); } catch {}
+      try { localStorage.setItem('battery_history', JSON.stringify(updated.slice(-500))); } catch { }
       return updated.slice(-500);
     });
     setOrderId(newId);
@@ -1031,7 +1138,7 @@ export default function BatteryPage() {
         readingsByBattery,
       };
       localStorage.setItem('battery_session', JSON.stringify(sessionData));
-    } catch {}
+    } catch { }
   }, [records, chartData, chartDataOCV, chartDataCCV, orderId, testDate, batteryType, productLine, ocvCenter, ccvCenter, chartSeriesByBattery, readingsByBattery]);
 
   useEffect(() => {
@@ -1041,7 +1148,7 @@ export default function BatteryPage() {
         setSavedSessionInfo(parsed);
         setResumeModalVisible(true);
       }
-    } catch {}
+    } catch { }
   }, []);
 
   // Verify template file still exists on server on mount
@@ -1054,7 +1161,7 @@ export default function BatteryPage() {
         localStorage.removeItem('battery_template_name');
         setTemplateName(null);
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   // Verify archive file still exists on server on mount
@@ -1067,7 +1174,7 @@ export default function BatteryPage() {
         localStorage.removeItem('battery_archive_name');
         setArchiveName(null);
       }
-    }).catch(() => {});
+    }).catch(() => { });
   }, []);
 
   const inputsDisabled = !connected;
@@ -1331,90 +1438,90 @@ export default function BatteryPage() {
 
       {/* Caliper Card — only shown after OCV/CCV phase is done */}
       {caliperPhase && (
-      <Card
-        size="small"
-        title={
-          <span>
-            📏 {t('batteryCaliperSection')}
-            {records.length > 0 && records[caliperIndex] != null && (
-              <span style={{ fontSize: 12, color: caliperSingleMode ? '#faad14' : '#69b1ff', marginLeft: 8 }}>
-                {caliperSingleMode
-                  ? `(Re-measure: ${t('batteryId')} ${records[caliperIndex].id})`
-                  : `(${t('batteryId')}: ${records[caliperIndex].id} / ${records.length})`
-                }
-              </span>
-            )}
-          </span>
-        }
-        style={{ marginBottom: 16 }}
-      >
-        <Space direction="horizontal" wrap>
-          <Space direction="vertical" size={2}>
-            <span style={{ fontSize: 12, color: '#aaa' }}>{t('batteryCaliperMode')}</span>
-            <Radio.Group
-              value={caliperMode}
-              onChange={(e) => setCaliperMode(e.target.value)}
-              buttonStyle="solid"
-              size="small"
+        <Card
+          size="small"
+          title={
+            <span>
+              📏 {t('batteryCaliperSection')}
+              {records.length > 0 && records[caliperIndex] != null && (
+                <span style={{ fontSize: 12, color: caliperSingleMode ? '#faad14' : '#69b1ff', marginLeft: 8 }}>
+                  {caliperSingleMode
+                    ? `(Re-measure: ${t('batteryId')} ${records[caliperIndex].id})`
+                    : `(${t('batteryId')}: ${records[caliperIndex].id} / ${records.length})`
+                  }
+                </span>
+              )}
+            </span>
+          }
+          style={{ marginBottom: 16 }}
+        >
+          <Space direction="horizontal" wrap>
+            <Space direction="vertical" size={2}>
+              <span style={{ fontSize: 12, color: '#aaa' }}>{t('batteryCaliperMode')}</span>
+              <Radio.Group
+                value={caliperMode}
+                onChange={(e) => setCaliperMode(e.target.value)}
+                buttonStyle="solid"
+                size="small"
+              >
+                <Radio.Button value="dia">{t('batteryCaliperModeDia')}</Radio.Button>
+                <Radio.Button value="hei">{t('batteryCaliperModeHei')}</Radio.Button>
+              </Radio.Group>
+            </Space>
+            <Space direction="vertical" size={2}>
+              <span style={{ fontSize: 12, color: '#aaa' }}>{t('batteryCaliperBuffer')}</span>
+              <Input
+                ref={caliperInputRef}
+                size="small"
+                value={caliperBuffer}
+                placeholder={t('batteryCaliperBuffer')}
+                style={{ width: 160, fontFamily: 'monospace', background: caliperBuffer ? '#1a3a1a' : undefined }}
+                readOnly
+              />
+            </Space>
+            <Space direction="vertical" size={2}>
+              <span style={{ fontSize: 12, color: '#aaa' }}>{t('batteryCaliperDia')} (mm)</span>
+              <InputNumber
+                size="small"
+                value={caliperDia ? parseFloat(caliperDia) : null}
+                onChange={(v) => setCaliperDia(v != null ? String(v) : '')}
+                step={0.01}
+                style={{ width: 100 }}
+                placeholder="—"
+              />
+            </Space>
+            <Space direction="vertical" size={2}>
+              <span style={{ fontSize: 12, color: '#aaa' }}>{t('batteryCaliperHei')} (mm)</span>
+              <InputNumber
+                size="small"
+                value={caliperHei ? parseFloat(caliperHei) : null}
+                onChange={(v) => setCaliperHei(v != null ? String(v) : '')}
+                step={0.01}
+                style={{ width: 100 }}
+                placeholder="—"
+              />
+            </Space>
+            <Tooltip title={t('batteryCaliperHint')}>
+              <QuestionCircleOutlined style={{ color: '#888', marginTop: 20 }} />
+            </Tooltip>
+          </Space>
+          <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>
+            💡 {t('batteryCaliperHint')}
+          </div>
+          <div style={{ marginTop: 8 }}>
+            <Button
+              onClick={handleSaveCaliper}
             >
-              <Radio.Button value="dia">{t('batteryCaliperModeDia')}</Radio.Button>
-              <Radio.Button value="hei">{t('batteryCaliperModeHei')}</Radio.Button>
-            </Radio.Group>
-          </Space>
-          <Space direction="vertical" size={2}>
-            <span style={{ fontSize: 12, color: '#aaa' }}>{t('batteryCaliperBuffer')}</span>
-            <Input
-              ref={caliperInputRef}
-              size="small"
-              value={caliperBuffer}
-              placeholder={t('batteryCaliperBuffer')}
-              style={{ width: 160, fontFamily: 'monospace', background: caliperBuffer ? '#1a3a1a' : undefined }}
-              readOnly
-            />
-          </Space>
-          <Space direction="vertical" size={2}>
-            <span style={{ fontSize: 12, color: '#aaa' }}>{t('batteryCaliperDia')} (mm)</span>
-            <InputNumber
-              size="small"
-              value={caliperDia ? parseFloat(caliperDia) : null}
-              onChange={(v) => setCaliperDia(v != null ? String(v) : '')}
-              step={0.01}
-              style={{ width: 100 }}
-              placeholder="—"
-            />
-          </Space>
-          <Space direction="vertical" size={2}>
-            <span style={{ fontSize: 12, color: '#aaa' }}>{t('batteryCaliperHei')} (mm)</span>
-            <InputNumber
-              size="small"
-              value={caliperHei ? parseFloat(caliperHei) : null}
-              onChange={(v) => setCaliperHei(v != null ? String(v) : '')}
-              step={0.01}
-              style={{ width: 100 }}
-              placeholder="—"
-            />
-          </Space>
-          <Tooltip title={t('batteryCaliperHint')}>
-            <QuestionCircleOutlined style={{ color: '#888', marginTop: 20 }} />
-          </Tooltip>
-        </Space>
-        <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>
-          💡 {t('batteryCaliperHint')}
-        </div>
-        <div style={{ marginTop: 8 }}>
-          <Button
-            onClick={handleSaveCaliper}
-          >
-            {t('batteryCaliperSkip')}
-          </Button>
-          <Button
-            style={{ marginLeft: 8 }}
-            onClick={handleResetCaliper}
-          >
-            {t('cancel')}
-          </Button>
-        </div>
-      </Card>
+              {t('batteryCaliperSkip')}
+            </Button>
+            <Button
+              style={{ marginLeft: 8 }}
+              onClick={handleResetCaliper}
+            >
+              {t('cancel')}
+            </Button>
+          </div>
+        </Card>
       )}
 
       {/* Excel Report Card */}
