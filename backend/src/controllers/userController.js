@@ -39,8 +39,8 @@ async function createUser(req, res) {
   if (!username || !password || !displayName) {
     return res.status(400).json({ message: 'username, password, displayName required' });
   }
-  if (!['admin', 'user', 'viewer', 'engineer', 'qc'].includes(role)) {
-    return res.status(400).json({ message: 'Invalid role. Use: admin, user, viewer, engineer, qc' });
+  if (!['admin', 'engineer', 'qc'].includes(role)) {
+    return res.status(400).json({ message: 'Invalid role. Use: admin, engineer, qc' });
   }
 
   const db = getDb();
@@ -114,7 +114,7 @@ async function updateUser(req, res) {
 
   if (displayName !== undefined) { updates.push('display_name = ?'); values.push(displayName.trim()); }
   if (role !== undefined) {
-    if (!['admin', 'user', 'viewer', 'engineer', 'qc'].includes(role)) {
+    if (!['admin', 'engineer', 'qc'].includes(role)) {
       return res.status(400).json({ message: 'Invalid role' });
     }
     updates.push('role = ?'); values.push(role);

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Avatar, Dropdown, Button, Space, Typography, Badge, Popover, List, Empty, Tag } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Button, Space, Badge, Popover, List, Empty, Tag } from 'antd';
 import {
   DashboardOutlined,
   FileOutlined,
@@ -63,7 +63,7 @@ export default function AppLayout() {
       key: 'lang-vi',
       label: (
         <Space size={6}>
-          <span>🇻🇳</span>
+          <img src="https://flagcdn.com/w20/vn.png" width="18" height="12" alt="VN" style={{ borderRadius: 2 }} />
           <span>Tiếng Việt</span>
           {lang === 'vi' && <Tag color="blue" style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px' }}>✓</Tag>}
         </Space>
@@ -74,7 +74,7 @@ export default function AppLayout() {
       key: 'lang-en',
       label: (
         <Space size={6}>
-          <span>🇬🇧</span>
+          <img src="https://flagcdn.com/w20/gb.png" width="18" height="12" alt="GB" style={{ borderRadius: 2 }} />
           <span>English</span>
           {lang === 'en' && <Tag color="blue" style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px' }}>✓</Tag>}
         </Space>
@@ -85,7 +85,7 @@ export default function AppLayout() {
       key: 'lang-zh',
       label: (
         <Space size={6}>
-          <span>🇨🇳</span>
+          <img src="https://flagcdn.com/w20/cn.png" width="18" height="12" alt="CN" style={{ borderRadius: 2 }} />
           <span>中文</span>
           {lang === 'zh' && <Tag color="blue" style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px' }}>✓</Tag>}
         </Space>
@@ -154,16 +154,9 @@ export default function AppLayout() {
           borderBottom: '1px solid rgba(255,255,255,0.1)',
         }}>
           {collapsed ? (
-            <Typography.Text style={{ color: '#fff', fontSize: 20, fontWeight: 700 }}>V</Typography.Text>
+            <img src="/logo.svg" alt="Voniko" style={{ height: 32, objectFit: 'contain' }} />
           ) : (
-            <Space direction="vertical" size={0} style={{ textAlign: 'center' }}>
-              <Typography.Text style={{ color: '#fff', fontSize: 16, fontWeight: 700, letterSpacing: 1 }}>
-                Voniko
-              </Typography.Text>
-              <Typography.Text style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11 }}>
-                Manufacturing System
-              </Typography.Text>
-            </Space>
+            <img src="/logo.svg" alt="Voniko" style={{ height: 44, maxWidth: '100%', objectFit: 'contain' }} />
           )}
         </div>
         <Menu
@@ -198,7 +191,13 @@ export default function AppLayout() {
           <Space>
             <Dropdown menu={{ items: langMenuItems }} trigger={['click']}>
               <Button type="text" icon={<GlobalOutlined />} style={{ padding: '0 8px' }}>
-                {lang === 'vi' ? '🇻🇳 VI' : lang === 'en' ? '🇬🇧 EN' : '🇨🇳 中文'}
+                <img
+                  src={lang === 'vi' ? 'https://flagcdn.com/w20/vn.png' : lang === 'en' ? 'https://flagcdn.com/w20/gb.png' : 'https://flagcdn.com/w20/cn.png'}
+                  width="18" height="12"
+                  alt={lang === 'vi' ? 'VN' : lang === 'en' ? 'EN' : 'CN'}
+                  style={{ borderRadius: 2, marginRight: 4 }}
+                />
+                {lang === 'vi' ? 'VI' : lang === 'en' ? 'EN' : '中文'}
               </Button>
             </Dropdown>
 

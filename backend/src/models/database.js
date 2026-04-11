@@ -37,7 +37,7 @@ function createTables() {
       username TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
       display_name TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'viewer',
+      role TEXT NOT NULL DEFAULT 'qc',
       avatar_url TEXT,
       is_active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now') || 'Z'),

@@ -52,8 +52,8 @@ export function AuthProvider({ children }) {
 
   const isAdmin = user?.role === 'admin';
   const isViewer = user?.role === 'viewer';
-  const canEdit = user?.role === 'admin' || user?.role === 'user';
-  const isEngineer = user?.role === 'engineer' || user?.role === 'user';
+  const canEdit = user?.role === 'admin' || user?.role === 'engineer';
+  const isEngineer = user?.role === 'engineer';
   const isQC = user?.role === 'qc';
 
   return (
