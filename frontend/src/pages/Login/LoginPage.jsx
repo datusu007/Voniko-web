@@ -41,7 +41,7 @@ export default function LoginPage() {
         {/* Logo/Title */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <img
-            src="/logo.svg"
+            src="/logo.avif"
             alt="Voniko"
             style={{ height: 64, maxWidth: 200, objectFit: 'contain', marginBottom: 8 }}
           />

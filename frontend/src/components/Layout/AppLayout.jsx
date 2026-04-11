@@ -154,9 +154,9 @@ export default function AppLayout() {
           borderBottom: '1px solid rgba(255,255,255,0.1)',
         }}>
           {collapsed ? (
-            <img src="/logo.svg" alt="Voniko" style={{ height: 32, objectFit: 'contain' }} />
+            <img src="/logo.avif" alt="Voniko" style={{ height: 32, objectFit: 'contain' }} />
           ) : (
-            <img src="/logo.svg" alt="Voniko" style={{ height: 44, maxWidth: '100%', objectFit: 'contain' }} />
+            <img src="/logo.avif" alt="Voniko" style={{ height: 44, maxWidth: '100%', objectFit: 'contain' }} />
           )}
         </div>
         <Menu
